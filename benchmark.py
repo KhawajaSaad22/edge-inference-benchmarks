@@ -141,6 +141,7 @@ def _run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
     result.update(metadata,dependencies=versions)
     with (output_dir/'sample-output.npz').open('xb') as stream: np.savez_compressed(stream,**arrays)
     result['sample_output_bytes']=(output_dir/'sample-output.npz').stat().st_size
+    result['sample_output_sha256']=hashlib.sha256((output_dir/'sample-output.npz').read_bytes()).hexdigest()
     result['sample_output_note']='One final output serialized as compressed NPZ, not full-video storage.'
     with (output_dir/'benchmark.json').open('x',encoding='utf-8') as stream: json.dump(result,stream,indent=2)
     return result

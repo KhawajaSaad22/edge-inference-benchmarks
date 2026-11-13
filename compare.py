@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 
 
-def compare(paths,allow_environment_differences=False):
+def compare(paths,allow_environment_differences=False,check_outputs=False,atol=0.,rtol=0.):
     reports=[json.loads(Path(path).read_text(encoding='utf-8')) for path in paths]
     if len(reports)<2: raise ValueError('Provide at least two benchmark reports')
     keys=('backend','input_sha256','input_shape','weights_sha256','model_size','warmup','repeats','scope','precision','inference_threshold','recipe_sha256','workbench_engine_sha256','workbench_gpu_sha256')
@@ -22,10 +22,15 @@ def compare(paths,allow_environment_differences=False):
             value=report.get(key)
             if not isinstance(value,(int,float)) or not math.isfinite(value) or value<0:
                 raise ValueError('Invalid benchmark metric: '+key)
-    return [dict(path=str(path),device=r['device'],platform=r['platform'],p50_ms=r['p50_ms'],
+    rows=[dict(path=str(path),device=r['device'],platform=r['platform'],p50_ms=r['p50_ms'],
                  p95_ms=r['p95_ms'],rss_sampled_peak_bytes=r['rss_sampled_peak_bytes'],
                  sample_output_bytes=r['sample_output_bytes'],environment_differences=diff)
             for path,r,diff in zip(paths,reports,differences)]
+    if check_outputs:
+        from parity import check_outputs as validate_outputs
+        for row,path,report in zip(rows,paths,reports):
+            row['output_parity']=validate_outputs(paths[0],path,reports[0],report,atol,rtol)
+    return rows
 
 
 def save_comparison(rows,path):
@@ -46,6 +51,10 @@ def save_comparison(rows,path):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__); p.add_argument('reports',nargs='+')
     p.add_argument('--allow-environment-differences',action='store_true');p.add_argument('--output')
-    args=p.parse_args();rows=compare(args.reports,args.allow_environment_differences)
+    p.add_argument('--check-outputs',action='store_true');p.add_argument('--atol',type=float,default=0.);p.add_argument('--rtol',type=float,default=0.)
+    args=p.parse_args()
+    if not args.check_outputs and (args.atol or args.rtol):p.error('Tolerances require --check-outputs')
+    rows=compare(args.reports,args.allow_environment_differences,args.check_outputs,args.atol,args.rtol)
     if args.output:save_comparison(rows,args.output)
     print(json.dumps(rows,indent=2))
+    if args.check_outputs and any(not row['output_parity']['passed'] for row in rows):raise SystemExit(1)

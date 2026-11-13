@@ -70,3 +70,13 @@ image. The optional model path is not validated by the baseline tests.
 ## GPU update — 13 November 2026
 
 The workbench backend measures an explicit CV2_Image_to_Script recipe on CPU or CUDA. See [GPU_WORKBENCH.md](GPU_WORKBENCH.md) for commands, parity checks and measured scope.
+
+## Numerical output checks — 13 November 2026
+
+Add `--check-outputs` to comparison commands to compare each saved sample against the first report. Optional `--atol` and `--rtol` default to exact equality. Reports include array shapes, dtypes, exact agreement and maximum absolute differences; class IDs and masks always require exact agreement. A numeric mismatch writes the requested report and returns exit code 1. Incompatible shapes/keys, nonfinite values and changed hashed output archives fail explicitly.
+
+```sh
+python compare.py outputs/workbench-cpu/benchmark.json outputs/workbench-cuda/benchmark.json --allow-environment-differences --check-outputs --atol 1 --output outputs/checked-comparison.html
+```
+
+New benchmark runs record the sample archive SHA-256. Older reports without that hash remain readable, with schema/numeric checks only. The existing CPU/CUDA workbench samples passed exact equality. This checks one final sample per run, not a dataset or model accuracy. Detection array order must match; the tool does not perform semantic box matching. Multi-image trials and stage timings remain future work.
