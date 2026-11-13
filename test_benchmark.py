@@ -8,6 +8,20 @@ from compare import compare,save_comparison
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_workbench_requires_explicit_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError,'workbench-root'):
+                run(Path(folder)/'out',backend='workbench',size=32,repeats=1)
+
+    def test_comparison_rejects_different_recipe_or_code(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);run(root/'a',size=32,warmup=0,repeats=1)
+            source=root/'a/benchmark.json';other=root/'other.json'
+            for key in ('recipe_sha256','workbench_engine_sha256','workbench_gpu_sha256'):
+                report=json.loads(source.read_text());report[key]='different'
+                other.write_text(json.dumps(report))
+                with self.assertRaises(ValueError):compare([source,other],True)
+
     def test_environment_override_and_portable_comparison(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);run(root/'a',size=32,warmup=0,repeats=2)

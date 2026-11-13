@@ -66,3 +66,7 @@ Use target `model` to install RF-DETR. Mount my checkpoint and input image, requ
 retain results, ensuring container UID 10001 can write to it. GPU driver/runtime
 compatibility must be checked on each machine; Jetson needs a separate compatible
 image. The optional model path is not validated by the baseline tests.
+
+## GPU update — 13 November 2026
+
+The workbench backend measures an explicit CV2_Image_to_Script recipe on CPU or CUDA. See [GPU_WORKBENCH.md](GPU_WORKBENCH.md) for commands, parity checks and measured scope.

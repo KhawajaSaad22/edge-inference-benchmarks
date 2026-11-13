@@ -55,7 +55,7 @@ def run(output_dir,**options):
 
 
 def _run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
-        weights=None,model_size='nano',device='cpu',warmup=3,repeats=20):
+        weights=None,model_size='nano',device='cpu',warmup=3,repeats=20,workbench_root=None,recipe=None):
     startup_started=time.perf_counter()
     output_dir=Path(output_dir)
     if size<16 or size>8192: raise ValueError('Image size must be 16..8192')
@@ -100,9 +100,36 @@ def _run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
                 value=getattr(detections,name,None)
                 if value is not None: arrays[name]=np.asarray(value)
             return arrays
+    elif backend=='workbench':
+        import sys
+        if workbench_root is None or recipe is None:raise ValueError('Workbench benchmarks require --workbench-root and --recipe')
+        root=Path(workbench_root).resolve()
+        if not (root/'engine.py').is_file() or not (root/'gpu_backend.py').is_file():raise ValueError('Invalid workbench source directory')
+        sys.path.insert(0,str(root))
+        try:
+            engine=importlib.import_module('engine');gpu_backend=importlib.import_module('gpu_backend')
+            if Path(engine.__file__).resolve().parent!=root or Path(gpu_backend.__file__).resolve().parent!=root:
+                raise ValueError('A different workbench module is already loaded in this process')
+        finally:sys.path.pop(0)
+        pipeline=engine.load_pipeline(recipe)
+        metadata.update(provider='workbench',precision='uint8',inference_threshold=None,
+                        recipe_sha256=hashlib.sha256(json.dumps(pipeline,sort_keys=True).encode()).hexdigest(),
+                        workbench_engine_sha256=hashlib.sha256((root/'engine.py').read_bytes()).hexdigest(),
+                        workbench_gpu_sha256=hashlib.sha256((root/'gpu_backend.py').read_bytes()).hexdigest())
+        if device=='cuda':
+            import torch
+            if not torch.cuda.is_available():raise ValueError('CUDA unavailable')
+            torch.cuda.reset_peak_memory_stats();sync=torch.cuda.synchronize
+            metadata['gpu']=torch.cuda.get_device_name(0)
+        last_execution={}
+        def workload():
+            output,_,_,execution=gpu_backend.run(rgb,pipeline,device,retain_intermediates=False,strict=device=='cuda')
+            last_execution.clear();last_execution.update(execution)
+            return {'image':output}
     else: raise ValueError('Unknown backend')
     metadata['startup_and_input_load_s']=time.perf_counter()-startup_started
     result,arrays=measure(workload,warmup=warmup,repeats=repeats,synchronize=sync)
+    if backend=='workbench':result['execution']=last_execution.copy()
     if torch is not None and device=='cuda':
         result['gpu_peak_allocated_bytes']=torch.cuda.max_memory_allocated()
         result['gpu_peak_reserved_bytes']=torch.cuda.max_memory_reserved()
@@ -121,7 +148,8 @@ def _run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--output',required=True); p.add_argument('--backend',choices=['preprocess','rfdetr'],default='preprocess')
+    p.add_argument('--output',required=True); p.add_argument('--backend',choices=['preprocess','rfdetr','workbench'],default='preprocess')
+    p.add_argument('--workbench-root');p.add_argument('--recipe')
     p.add_argument('--image'); p.add_argument('--size',type=int,default=512); p.add_argument('--seed',type=int,default=42)
     p.add_argument('--weights'); p.add_argument('--model-size',choices=['nano','small'],default='nano')
     p.add_argument('--device',choices=['cpu','cuda'],default='cpu'); p.add_argument('--warmup',type=int,default=3)

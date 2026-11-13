@@ -10,7 +10,7 @@ from pathlib import Path
 def compare(paths,allow_environment_differences=False):
     reports=[json.loads(Path(path).read_text(encoding='utf-8')) for path in paths]
     if len(reports)<2: raise ValueError('Provide at least two benchmark reports')
-    keys=('backend','input_sha256','input_shape','weights_sha256','model_size','warmup','repeats','scope','precision','inference_threshold')
+    keys=('backend','input_sha256','input_shape','weights_sha256','model_size','warmup','repeats','scope','precision','inference_threshold','recipe_sha256','workbench_engine_sha256','workbench_gpu_sha256')
     if any(any(report.get(key)!=reports[0].get(key) for key in keys) for report in reports[1:]):
         raise ValueError('Backend, input, model and measurement settings must match')
     environment=('dependencies','python','platform','device','cpu','cpu_logical_count','gpu','provider','opencv_threads','torch_threads','torch_cuda_runtime')
