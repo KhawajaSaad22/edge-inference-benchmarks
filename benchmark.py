@@ -37,13 +37,33 @@ def measure(workload,*,warmup=3,repeats=20,synchronize=lambda:None):
                 memory_note='Process RSS sampled every 5ms after warmup; includes model/process overhead and may miss short peaks.'),output
 
 
-def run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
-        weights=None,model_size='nano',device='cpu',warmup=3,repeats=20):
+def run(output_dir,**options):
     output_dir=Path(output_dir)
-    if output_dir.exists(): raise ValueError('Choose a new output directory')
+    if output_dir.exists():raise ValueError('Choose a new output directory')
+    if type(options.get('warmup',3)) is not int or options.get('warmup',3)<0 or type(options.get('repeats',20)) is not int or options.get('repeats',20)<1:
+        raise ValueError('Nonnegative warmup and positive repeat count required')
+    output_dir.mkdir(parents=True)
+    state={'schema_version':1,'status':'running','configuration':options}
+    def save_state():
+        (output_dir/'run.json').write_text(json.dumps(state,indent=2,default=str),encoding='utf-8')
+    save_state()
+    try:
+        result=_run(output_dir,**options)
+        state['status']='completed';save_state();return result
+    except Exception as exc:
+        state.update(status='failed',error_type=type(exc).__name__,error=str(exc));save_state();raise
+
+
+def _run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
+        weights=None,model_size='nano',device='cpu',warmup=3,repeats=20):
+    startup_started=time.perf_counter()
+    output_dir=Path(output_dir)
     if size<16 or size>8192: raise ValueError('Image size must be 16..8192')
     metadata=dict(schema_version=1,created_utc=datetime.now(timezone.utc).isoformat(),
         backend=backend,device=device,seed=seed,platform=platform.platform(),python=platform.python_version(),
+        cpu=platform.processor() or 'unknown',cpu_logical_count=psutil.cpu_count(),
+        opencv_threads=cv2.getNumThreads(),precision='backend_default' if backend=='rfdetr' else 'uint8',
+        provider='pytorch' if backend=='rfdetr' else 'opencv',inference_threshold=.5 if backend=='rfdetr' else None,
         scope='One image per iteration; excludes model startup, file decoding and result serialization.',
         quality_note='No accuracy, recall, defect validity or real-time drone capability is measured.')
     if image_path:
@@ -67,6 +87,7 @@ def run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
         from rfdetr import RFDETRSegNano,RFDETRSegSmall
         if device=='cuda' and not torch.cuda.is_available(): raise ValueError('CUDA is unavailable')
         model={'nano':RFDETRSegNano,'small':RFDETRSegSmall}[model_size](pretrain_weights=str(weights),device=device)
+        metadata.update(torch_threads=torch.get_num_threads(),torch_cuda_runtime=torch.version.cuda)
         metadata.update(model_size=model_size,weights_sha256=hashlib.sha256(Path(weights).read_bytes()).hexdigest())
         if device=='cuda':
             sync=torch.cuda.synchronize; metadata['gpu']=torch.cuda.get_device_name(0)
@@ -80,6 +101,7 @@ def run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
                 if value is not None: arrays[name]=np.asarray(value)
             return arrays
     else: raise ValueError('Unknown backend')
+    metadata['startup_and_input_load_s']=time.perf_counter()-startup_started
     result,arrays=measure(workload,warmup=warmup,repeats=repeats,synchronize=sync)
     if torch is not None and device=='cuda':
         result['gpu_peak_allocated_bytes']=torch.cuda.max_memory_allocated()
@@ -90,7 +112,6 @@ def run(output_dir,*,backend='preprocess',image_path=None,size=512,seed=42,
         try: versions[package]=importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError: pass
     result.update(metadata,dependencies=versions)
-    output_dir.mkdir(parents=True)
     with (output_dir/'sample-output.npz').open('xb') as stream: np.savez_compressed(stream,**arrays)
     result['sample_output_bytes']=(output_dir/'sample-output.npz').stat().st_size
     result['sample_output_note']='One final output serialized as compressed NPZ, not full-video storage.'

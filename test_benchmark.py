@@ -4,10 +4,33 @@ import tempfile
 import unittest
 import numpy as np
 from benchmark import measure,run
-from compare import compare
+from compare import compare,save_comparison
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_environment_override_and_portable_comparison(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);run(root/'a',size=32,warmup=0,repeats=2)
+            paths=[root/'a/benchmark.json',root/'other.json']
+            report=json.loads(paths[0].read_text());report['dependencies']={'different':'1'}
+            paths[1].write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError,'environments differ'):compare(paths)
+            rows=compare(paths,True)
+            self.assertIn('dependencies',rows[1]['environment_differences'])
+            for suffix in ('csv','html','json'):
+                save_comparison(rows,root/('report.'+suffix))
+                self.assertTrue((root/('report.'+suffix)).is_file())
+            report['precision']='changed';paths[1].write_text(json.dumps(report))
+            with self.assertRaises(ValueError):compare(paths,True)
+
+    def test_failed_run_records_state(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)/'run'
+            with patch('benchmark.measure',side_effect=RuntimeError('simulated failure')):
+                with self.assertRaises(RuntimeError):run(root,size=32,repeats=2)
+            state=json.loads((root/'run.json').read_text())
+            self.assertEqual(state['status'],'failed');self.assertIn('simulated',state['error'])
     def test_warmup_and_sync_boundaries(self):
         calls=[]; sync=[]
         result,output=measure(lambda:(calls.append(1) or {'x':np.ones((2,2))}),warmup=2,repeats=3,

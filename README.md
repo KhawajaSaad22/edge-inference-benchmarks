@@ -2,6 +2,18 @@
 
 See [ROADMAP.md](ROADMAP.md) for measurement, comparison and optional-backend improvements.
 
+Measurement update: each run writes running/completed/failed state and records
+provider, precision policy, threshold, thread settings and startup/input-load time.
+Comparisons reject differing runtime environments unless explicitly allowed:
+
+```sh
+python compare.py first/benchmark.json second/benchmark.json --allow-environment-differences --output comparison.html
+```
+
+The override records environment differences; it does not allow mismatched tasks,
+precisions or timing scopes. JSON/CSV/HTML outputs refuse existing paths. RSS and
+latency are still sampled per the scopes below; no accuracy claim is added.
+
 Measure repeated single-image workload latency, sampled process RSS, optional PyTorch
 GPU allocator peaks and one serialized output size. The initial baseline performs
 actual CPU grayscale/blur/Canny processing on seeded synthetic pixels. It is not an

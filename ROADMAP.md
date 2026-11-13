@@ -3,6 +3,11 @@
 Reviewed 13 November 2026. The three existing tests passed. Proposed work below does
 not establish model performance and is not implemented by this documentation patch.
 
+Delivered update: failed/completed run records, CPU/thread/provider/precision-policy
+metadata, explicit threshold and startup/input-load timing, compatibility checking,
+environment-difference override and CSV/HTML/JSON comparison exports. Five tests pass.
+Multiple-image trials, stage-by-stage timing, charts and optional ONNX adapters remain planned.
+
 ## Priorities
 
 1. **Comparable experiment metadata.** Record CPU/GPU identifiers, thread counts,

@@ -1,5 +1,11 @@
 # Initial validation — 12 November 2026
 
+## Measurement update — 13 November 2026
+
+Five local tests pass, including failed-run state, incompatible environments,
+explicit overrides, precision guards and comparison file formats. The actual
+RF-DETR checkpoint/GPU path remains unverified. Historical checks follow.
+
 Three automated checks passed locally and in a Python 3.11 Linux container:
 
 - Warmup/repetition counts, synchronization boundaries and memory-report fields.
