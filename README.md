@@ -1,5 +1,7 @@
 # Edge inference benchmarks
 
+See [ROADMAP.md](ROADMAP.md) for measurement, comparison and optional-backend improvements.
+
 Measure repeated single-image workload latency, sampled process RSS, optional PyTorch
 GPU allocator peaks and one serialized output size. The initial baseline performs
 actual CPU grayscale/blur/Canny processing on seeded synthetic pixels. It is not an
